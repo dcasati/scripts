@@ -8,7 +8,7 @@ set -e
 ################################################################################
 # Default configuration
 LOCATION=${LOCATION:-westus3}
-RESOURCEGROUP=${RESOURCEGROUP:-rg-aks}
+RESOURCE_GROUP=${RESOURCE_GROUP:-rg-aks}
 CLUSTER=${CLUSTER:-aks-cluster}
 KUBERNETES_VERSION=${KUBERNETES_VERSION:-1.33}
 NODE_COUNT=${NODE_COUNT:-1}
@@ -21,7 +21,7 @@ printHeader() {
   echo "Kubernetes Version: $KUBERNETES_VERSION"
   echo "Node Count: $NODE_COUNT"
   echo "Location: $LOCATION"
-  echo "Resource Group: $RESOURCEGROUP"
+  echo "Resource Group: $RESOURCE_GROUP"
   echo ""
 }
 
@@ -36,7 +36,7 @@ printUsage() {
   echo ""
   echo "Environment variables (with defaults):"
   echo "  LOCATION=${LOCATION}"
-  echo "  RESOURCEGROUP=${RESOURCEGROUP}"
+  echo "  RESOURCE_GROUP=${RESOURCE_GROUP}"
   echo "  CLUSTER=${CLUSTER}"
   echo "  KUBERNETES_VERSION=${KUBERNETES_VERSION}"
   echo "  NODE_COUNT=${NODE_COUNT}"
@@ -94,8 +94,8 @@ registerProviders() {
 }
 
 createResourceGroup() {
-  log "Creating resource group $RESOURCEGROUP in $LOCATION"
-  az group create --location "$LOCATION" --name "$RESOURCEGROUP"
+  log "Creating resource group $RESOURCE_GROUP in $LOCATION"
+  az group create --location "$LOCATION" --name "$RESOURCE_GROUP"
 }
 
 createVirtualNetwork() {
@@ -103,13 +103,13 @@ createVirtualNetwork() {
 
   # Create virtual network
   az network vnet create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name aks-vnet \
     --address-prefixes 10.0.0.0/8
 
   # Create AKS subnet
   az network vnet subnet create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --vnet-name aks-vnet \
     --name aks-subnet \
     --address-prefixes 10.1.0.0/16
@@ -122,14 +122,14 @@ createCluster() {
 
   # Get subnet ID
   SUBNET_ID=$(az network vnet subnet show \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --vnet-name aks-vnet \
     --name aks-subnet \
     --query id -o tsv)
 
   # Create the cluster
   az aks create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --kubernetes-version "$KUBERNETES_VERSION" \
     --node-count "$NODE_COUNT" \
@@ -143,7 +143,7 @@ getCredentials() {
   log "Getting cluster credentials..."
 
   az aks get-credentials \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --file "$KUBECONFIG" \
     --overwrite-existing
@@ -154,14 +154,14 @@ getCredentials() {
 show() {
   log "Getting cluster information..."
 
-  if az aks show --name "$CLUSTER" --resource-group "$RESOURCEGROUP" >/dev/null 2>&1; then
-    CLUSTER_INFO=$(az aks show --name "$CLUSTER" --resource-group "$RESOURCEGROUP" --output json)
+  if az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+    CLUSTER_INFO=$(az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" --output json)
 
     echo ""
     echo "Cluster Information:"
     echo "==================="
     echo "Name: $CLUSTER"
-    echo "Resource Group: $RESOURCEGROUP"
+    echo "Resource Group: $RESOURCE_GROUP"
     echo "Location: $LOCATION"
     echo "Kubernetes Version: $(echo "$CLUSTER_INFO" | jq -r '.kubernetesVersion')"
     echo "Provisioning State: $(echo "$CLUSTER_INFO" | jq -r '.provisioningState')"
@@ -169,9 +169,9 @@ show() {
     echo ""
     echo "Node Pool Information:"
     echo "====================="
-    az aks nodepool list --resource-group "$RESOURCEGROUP" --cluster-name "$CLUSTER" -o table
+    az aks nodepool list --resource-group "$RESOURCE_GROUP" --cluster-name "$CLUSTER" -o table
   else
-    log "Cluster $CLUSTER not found in resource group $RESOURCEGROUP"
+    log "Cluster $CLUSTER not found in resource group $RESOURCE_GROUP"
     exit 1
   fi
 }
@@ -180,16 +180,16 @@ destroy() {
   log "Destroying AKS cluster and associated resources..."
 
   # Delete the cluster
-  if az aks show --name "$CLUSTER" --resource-group "$RESOURCEGROUP" >/dev/null 2>&1; then
+  if az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
     log "Deleting AKS cluster $CLUSTER"
-    az aks delete --name "$CLUSTER" --resource-group "$RESOURCEGROUP" --yes
+    az aks delete --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" --yes
   else
     log "Cluster $CLUSTER not found, skipping cluster deletion"
   fi
 
   # Delete the entire resource group
-  log "Deleting resource group $RESOURCEGROUP"
-  az group delete --name "$RESOURCEGROUP" --yes --no-wait
+  log "Deleting resource group $RESOURCE_GROUP"
+  az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
   log "Destruction completed"
 }

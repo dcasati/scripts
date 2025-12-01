@@ -8,7 +8,7 @@ set -e
 ######################################################################################
 # Default configuration
 LOCATION=${LOCATION:-westus3}
-RESOURCEGROUP=${RESOURCEGROUP:-rg-aks-fw-test}
+RESOURCE_GROUP=${RESOURCE_GROUP:-rg-aks-fw-test}
 CLUSTER=${CLUSTER:-aks-fw-test}
 KUBERNETES_VERSION=${KUBERNETES_VERSION:-1.32}
 NODE_COUNT=${NODE_COUNT:-1}
@@ -35,7 +35,7 @@ printHeader() {
   echo "Kubernetes Version: $KUBERNETES_VERSION"
   echo "Node Count: $NODE_COUNT"
   echo "Location: $LOCATION"
-  echo "Resource Group: $RESOURCEGROUP"
+  echo "Resource Group: $RESOURCE_GROUP"
   echo "Hub VNet: $HUB_VNET_NAME ($HUB_VNET_PREFIX)"
   echo "Spoke VNet: $SPOKE_VNET_NAME ($SPOKE_VNET_PREFIX)"
   echo ""
@@ -53,7 +53,7 @@ printUsage() {
   echo ""
   echo "Environment variables (with defaults):"
   echo "  LOCATION=${LOCATION}"
-  echo "  RESOURCEGROUP=${RESOURCEGROUP}"
+  echo "  RESOURCE_GROUP=${RESOURCE_GROUP}"
   echo "  CLUSTER=${CLUSTER}"
   echo "  KUBERNETES_VERSION=${KUBERNETES_VERSION}"
   echo "  NODE_COUNT=${NODE_COUNT}"
@@ -111,8 +111,8 @@ registerProviders() {
 }
 
 createResourceGroup() {
-  log "Creating resource group $RESOURCEGROUP in $LOCATION"
-  az group create --location "$LOCATION" --name "$RESOURCEGROUP" -o none
+  log "Creating resource group $RESOURCE_GROUP in $LOCATION"
+  az group create --location "$LOCATION" --name "$RESOURCE_GROUP" -o none
 }
 
 createHubVNet() {
@@ -120,7 +120,7 @@ createHubVNet() {
 
   # Create hub VNet with NVA subnet
   az network vnet create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$HUB_VNET_NAME" \
     --address-prefix "$HUB_VNET_PREFIX" \
     --subnet-name nva-subnet \
@@ -135,7 +135,7 @@ createSpokeVNet() {
 
   # Create spoke VNet with AKS subnet
   az network vnet create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$SPOKE_VNET_NAME" \
     --address-prefix "$SPOKE_VNET_PREFIX" \
     --subnet-name aks-subnet \
@@ -149,12 +149,12 @@ createVNetPeerings() {
   log "Creating VNet peerings..."
 
   # Get VNet IDs
-  HUB_VNET_ID=$(az network vnet show -g "$RESOURCEGROUP" -n "$HUB_VNET_NAME" --query id -o tsv)
-  SPOKE_VNET_ID=$(az network vnet show -g "$RESOURCEGROUP" -n "$SPOKE_VNET_NAME" --query id -o tsv)
+  HUB_VNET_ID=$(az network vnet show -g "$RESOURCE_GROUP" -n "$HUB_VNET_NAME" --query id -o tsv)
+  SPOKE_VNET_ID=$(az network vnet show -g "$RESOURCE_GROUP" -n "$SPOKE_VNET_NAME" --query id -o tsv)
 
   # Hub to Spoke peering
   az network vnet peering create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name hub-to-spoke \
     --vnet-name "$HUB_VNET_NAME" \
     --remote-vnet "$SPOKE_VNET_ID" \
@@ -164,7 +164,7 @@ createVNetPeerings() {
 
   # Spoke to Hub peering
   az network vnet peering create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name spoke-to-hub \
     --vnet-name "$SPOKE_VNET_NAME" \
     --remote-vnet "$HUB_VNET_ID" \
@@ -192,7 +192,7 @@ createNVA() {
 
   # Create public IP for NVA
   az network public-ip create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "${NVA_NAME}-pip" \
     --sku Standard \
     --allocation-method Static \
@@ -200,13 +200,13 @@ createNVA() {
 
   # Create NSG for NVA
   az network nsg create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "${NVA_NAME}-nsg" \
     -o none
 
   # Allow SSH
   az network nsg rule create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --nsg-name "${NVA_NAME}-nsg" \
     --name allow-ssh \
     --priority 100 \
@@ -217,7 +217,7 @@ createNVA() {
 
   # Allow all from VNets
   az network nsg rule create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --nsg-name "${NVA_NAME}-nsg" \
     --name allow-vnet-inbound \
     --priority 200 \
@@ -230,7 +230,7 @@ createNVA() {
 
   # Create the FreeBSD VM
   az vm create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$NVA_NAME" \
     --image "$NVA_IMAGE" \
     --size "$NVA_SIZE" \
@@ -243,10 +243,10 @@ createNVA() {
     -o none
 
   # Enable IP forwarding on NIC
-  NIC_ID=$(az vm show -g "$RESOURCEGROUP" -n "$NVA_NAME" --query "networkProfile.networkInterfaces[0].id" -o tsv)
+  NIC_ID=$(az vm show -g "$RESOURCE_GROUP" -n "$NVA_NAME" --query "networkProfile.networkInterfaces[0].id" -o tsv)
   NIC_NAME=$(basename "$NIC_ID")
   az network nic update \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$NIC_NAME" \
     --ip-forwarding true \
     -o none
@@ -257,7 +257,7 @@ createNVA() {
 configureNVA() {
   log "Configuring PF on FreeBSD NVA..."
 
-  NVA_PIP=$(az network public-ip show -g "$RESOURCEGROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
+  NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
 
   # Wait for VM to be ready
   sleep 30
@@ -287,18 +287,18 @@ createRouteTable() {
   log "Creating route table for forced tunneling..."
 
   # Get NVA private IP
-  NVA_PRIVATE_IP=$(az vm show -g "$RESOURCEGROUP" -n "$NVA_NAME" -d --query privateIps -o tsv)
+  NVA_PRIVATE_IP=$(az vm show -g "$RESOURCE_GROUP" -n "$NVA_NAME" -d --query privateIps -o tsv)
 
   # Create route table
   az network route-table create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name aks-rt \
     --disable-bgp-route-propagation true \
     -o none
 
   # Add default route to NVA
   az network route-table route create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --route-table-name aks-rt \
     --name default-route \
     --address-prefix 0.0.0.0/0 \
@@ -308,7 +308,7 @@ createRouteTable() {
 
   # Associate route table with AKS subnet
   az network vnet subnet update \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --vnet-name "$SPOKE_VNET_NAME" \
     --name aks-subnet \
     --route-table aks-rt \
@@ -322,14 +322,14 @@ createAKSCluster() {
 
   # Get AKS subnet ID
   AKS_SUBNET_ID=$(az network vnet subnet show \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --vnet-name "$SPOKE_VNET_NAME" \
     --name aks-subnet \
     --query id -o tsv)
 
   # Create the cluster
   az aks create \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --location "$LOCATION" \
     --kubernetes-version "$KUBERNETES_VERSION" \
@@ -349,13 +349,13 @@ linkPrivateDNSZone() {
   log "Linking private DNS zone to hub VNet..."
 
   # Get node resource group
-  NODE_RG=$(az aks show -g "$RESOURCEGROUP" -n "$CLUSTER" --query nodeResourceGroup -o tsv)
+  NODE_RG=$(az aks show -g "$RESOURCE_GROUP" -n "$CLUSTER" --query nodeResourceGroup -o tsv)
 
   # Get private DNS zone name
   DNS_ZONE=$(az network private-dns zone list -g "$NODE_RG" --query "[0].name" -o tsv)
 
   # Get hub VNet ID
-  HUB_VNET_ID=$(az network vnet show -g "$RESOURCEGROUP" -n "$HUB_VNET_NAME" --query id -o tsv)
+  HUB_VNET_ID=$(az network vnet show -g "$RESOURCE_GROUP" -n "$HUB_VNET_NAME" --query id -o tsv)
 
   # Create DNS zone link
   az network private-dns link vnet create \
@@ -373,7 +373,7 @@ getCredentials() {
   log "Getting cluster credentials..."
 
   az aks get-credentials \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --file "$KUBECONFIG" \
     --overwrite-existing
@@ -384,7 +384,7 @@ getCredentials() {
 copyKubeconfigToNVA() {
   log "Copying kubeconfig to NVA..."
 
-  NVA_PIP=$(az network public-ip show -g "$RESOURCEGROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
+  NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
   scp -o StrictHostKeyChecking=no "$KUBECONFIG" azureuser@"$NVA_PIP":~/kubeconfig
 
   log "Kubeconfig copied to NVA at ~/kubeconfig"
@@ -394,7 +394,7 @@ createTestPod() {
   log "Creating test pod..."
 
   az aks command invoke \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --command "kubectl run test-icmp --image=alpine --restart=Never --command -- sleep infinity" \
     2>/dev/null || true
@@ -412,7 +412,7 @@ testICMP() {
   echo "Ping test to 8.8.8.8:"
   echo "====================="
   az aks command invoke \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --command "kubectl exec test-icmp -- ping -c 3 8.8.8.8 2>/dev/null || echo 'Creating test pod first...'"
 
@@ -420,11 +420,11 @@ testICMP() {
   echo "Checking outbound IP:"
   echo "====================="
   az aks command invoke \
-    --resource-group "$RESOURCEGROUP" \
+    --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER" \
     --command "kubectl exec test-icmp -- wget -qO- ifconfig.me/ip 2>/dev/null"
 
-  NVA_PIP=$(az network public-ip show -g "$RESOURCEGROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
+  NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
   echo ""
   echo "Expected NVA public IP: $NVA_PIP"
 }
@@ -433,22 +433,22 @@ show() {
   log "Getting infrastructure information..."
 
   echo ""
-  echo "Resource Group: $RESOURCEGROUP"
+  echo "Resource Group: $RESOURCE_GROUP"
   echo "Location: $LOCATION"
   echo ""
 
-  if az aks show --name "$CLUSTER" --resource-group "$RESOURCEGROUP" >/dev/null 2>&1; then
+  if az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
     echo "AKS Cluster Information:"
     echo "========================"
-    az aks show --name "$CLUSTER" --resource-group "$RESOURCEGROUP" \
+    az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" \
       --query "{Name:name, State:provisioningState, K8sVersion:kubernetesVersion, PrivateCluster:apiServerAccessProfile.enablePrivateCluster}" \
       -o table
     echo ""
   fi
 
-  if az vm show --name "$NVA_NAME" --resource-group "$RESOURCEGROUP" >/dev/null 2>&1; then
-    NVA_PIP=$(az network public-ip show -g "$RESOURCEGROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
-    NVA_PRIVATE_IP=$(az vm show -g "$RESOURCEGROUP" -n "$NVA_NAME" -d --query privateIps -o tsv)
+  if az vm show --name "$NVA_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+    NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
+    NVA_PRIVATE_IP=$(az vm show -g "$RESOURCE_GROUP" -n "$NVA_NAME" -d --query privateIps -o tsv)
 
     echo "FreeBSD NVA Information:"
     echo "========================"
@@ -461,20 +461,20 @@ show() {
 
   echo "Network Configuration:"
   echo "======================"
-  az network vnet list -g "$RESOURCEGROUP" -o table
+  az network vnet list -g "$RESOURCE_GROUP" -o table
   echo ""
 
   echo "Route Table:"
   echo "============"
-  az network route-table route list -g "$RESOURCEGROUP" --route-table-name aks-rt -o table 2>/dev/null || echo "No route table found"
+  az network route-table route list -g "$RESOURCE_GROUP" --route-table-name aks-rt -o table 2>/dev/null || echo "No route table found"
 }
 
 destroy() {
   log "Destroying all resources..."
 
   # Delete the resource group
-  log "Deleting resource group $RESOURCEGROUP"
-  az group delete --name "$RESOURCEGROUP" --yes --no-wait
+  log "Deleting resource group $RESOURCE_GROUP"
+  az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
   log "Destruction initiated (running in background)"
 }

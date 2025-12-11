@@ -67,8 +67,8 @@ log() {
   echo "[$(date +"%r")] $*"
 }
 
-checkDependencies() {
-  log "Checking dependencies ..."
+check_dependencies() {
+  log "Checking dependencies..."
   local _NEEDED="az kubectl"
   local _DEP_FLAG=false
 
@@ -99,7 +99,7 @@ checkDependencies() {
   log "All dependencies satisfied"
 }
 
-registerFeatures() {
+register_features() {
   log "Registering preview features..."
 
   log "  Registering UserDefinedSchedulerConfigurationPreview feature"
@@ -113,12 +113,12 @@ registerFeatures() {
   log "Preview features registered"
 }
 
-createResourceGroup() {
+create_resource_group() {
   log "Creating resource group $RESOURCE_GROUP in $LOCATION"
   az group create --location "$LOCATION" --name "$RESOURCE_GROUP"
 }
 
-createCluster() {
+create_cluster() {
   log "Setting up AKS cluster with custom scheduler configuration enabled..."
 
   # Check if cluster already exists
@@ -141,7 +141,7 @@ createCluster() {
   fi
 }
 
-createGpuNodePool() {
+create_gpu_node_pool() {
   log "Creating GPU node pool with Standard_NC40ads_H100_v5 in zone 1..."
 
   az aks nodepool add \
@@ -155,7 +155,7 @@ createGpuNodePool() {
   log "GPU node pool created successfully"
 }
 
-getCredentials() {
+get_credentials() {
   log "Getting cluster credentials..."
 
   az aks get-credentials \
@@ -167,7 +167,7 @@ getCredentials() {
   log "Credentials written to $KUBECONFIG"
 }
 
-generateSchedulerConfig() {
+generate_scheduler_config() {
   log "Generating scheduler configuration files"
 
   cat <<EOF >bin-pack-cpu-scheduler.yaml
@@ -251,7 +251,7 @@ EOF
   log "Configuration file generated successfully"
 }
 
-applySchedulerConfig() {
+apply_scheduler_config() {
   log "Applying scheduler configuration to cluster..."
 
   if [ ! -f "$SCHEDULER_CONFIG" ]; then
@@ -273,7 +273,7 @@ applySchedulerConfig() {
   log "Scheduler configuration applied successfully"
 }
 
-show() {
+do_show() {
   log "Getting cluster scheduler information..."
 
   if az aks show --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
@@ -304,7 +304,7 @@ show() {
   fi
 }
 
-destroy() {
+do_delete() {
   log "Destroying AKS cluster and resource group..."
 
   # Delete the cluster
@@ -331,29 +331,29 @@ exec_case() {
 
   case ${_opt} in
   install)           do_install ;;
-  delete)            destroy ;;
-  show)              show ;;
-  check-deps)        checkDependencies ;;
-  register)          registerFeatures ;;
-  create-rg)         createResourceGroup ;;
-  create)            createCluster ;;
-  create-gpu-pool)   createGpuNodePool ;;
-  get-credentials)   getCredentials ;;
-  config)            generateSchedulerConfig ;;
-  apply)             applySchedulerConfig ;;
+  delete)            do_delete ;;
+  show)              do_show ;;
+  check-deps)        check_dependencies ;;
+  register)          register_features ;;
+  create-rg)         create_resource_group ;;
+  create)            create_cluster ;;
+  create-gpu-pool)   create_gpu_node_pool ;;
+  get-credentials)   get_credentials ;;
+  config)            generate_scheduler_config ;;
+  apply)             apply_scheduler_config ;;
   *)                 usage ;;
   esac
   unset _opt
 }
 
 do_install() {
-  checkDependencies
-  registerFeatures
-  createResourceGroup
-  createCluster
-  createGpuNodePool
-  generateSchedulerConfig
-  applySchedulerConfig
+  check_dependencies
+  register_features
+  create_resource_group
+  create_cluster
+  create_gpu_node_pool
+  generate_scheduler_config
+  apply_scheduler_config
   log ""
   log "AKS custom scheduler setup completed!"
   log "Run '$0 -x show' to get cluster scheduler information"

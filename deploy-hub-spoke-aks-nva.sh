@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -e
+set -Eo pipefail
 
+trap exit SIGINT SIGTERM
+
+################################################################################
 # Hub-Spoke AKS with FreeBSD NVA Deployment Script
 # Deploys a private AKS cluster with forced tunneling through a FreeBSD NVA running PF
 
-######################################################################################
+################################################################################
 # Default configuration
 LOCATION=${LOCATION:-westus3}
 RESOURCE_GROUP=${RESOURCE_GROUP:-rg-aks-fw-test}
@@ -27,46 +30,60 @@ AKS_SUBNET_PREFIX=${AKS_SUBNET_PREFIX:-10.1.0.0/24}
 NVA_NAME=${NVA_NAME:-freebsd-nva}
 NVA_IMAGE=${NVA_IMAGE:-thefreebsdfoundation:freebsd-14_2:14_2-release-amd64-gen2-zfs:14.2.0}
 NVA_SIZE=${NVA_SIZE:-Standard_B2ms}
-######################################################################################
+################################################################################
 
-printHeader() {
-  echo "Hub-Spoke AKS with FreeBSD NVA Deployment"
-  echo "=========================================="
-  echo "Kubernetes Version: $KUBERNETES_VERSION"
-  echo "Node Count: $NODE_COUNT"
-  echo "Location: $LOCATION"
-  echo "Resource Group: $RESOURCE_GROUP"
-  echo "Hub VNet: $HUB_VNET_NAME ($HUB_VNET_PREFIX)"
-  echo "Spoke VNet: $SPOKE_VNET_NAME ($SPOKE_VNET_PREFIX)"
-  echo ""
+__usage="
+    -x  action to be executed.
+
+Possible verbs are:
+    install        Creates hub-spoke infrastructure with AKS and FreeBSD NVA.
+    delete         Deletes all resources.
+    show           Shows cluster and NVA information.
+    check-deps     Checks if required dependencies are installed.
+    test-icmp      Tests ICMP connectivity from AKS pod.
+
+Environment variables (with defaults):
+    LOCATION=${LOCATION}
+    RESOURCE_GROUP=${RESOURCE_GROUP}
+    CLUSTER=${CLUSTER}
+    KUBERNETES_VERSION=${KUBERNETES_VERSION}
+    NODE_COUNT=${NODE_COUNT}
+    KUBECONFIG=${KUBECONFIG}
+    HUB_VNET_NAME=${HUB_VNET_NAME}
+    HUB_VNET_PREFIX=${HUB_VNET_PREFIX}
+    NVA_SUBNET_PREFIX=${NVA_SUBNET_PREFIX}
+    SPOKE_VNET_NAME=${SPOKE_VNET_NAME}
+    SPOKE_VNET_PREFIX=${SPOKE_VNET_PREFIX}
+    AKS_SUBNET_PREFIX=${AKS_SUBNET_PREFIX}
+    NVA_NAME=${NVA_NAME}
+"
+
+usage() {
+  echo "usage: ${0##*/} [options]"
+  echo "${__usage/[[:space:]]/}"
+  exit 1
 }
 
-printUsage() {
-  echo "usage: ${0##*/} [options]"
+print_header() {
   echo ""
-  echo "Available Commands:"
-  echo "  -x install       Creates hub-spoke infrastructure with AKS and FreeBSD NVA"
-  echo "  -x destroy       Deletes all resources"
-  echo "  -x show          Shows cluster and NVA information"
-  echo "  -x check-deps    Checks if required dependencies are installed"
-  echo "  -x test-icmp     Tests ICMP connectivity from AKS pod"
+  echo "Hub-Spoke AKS with FreeBSD NVA Deployment"
+  echo "=========================================="
   echo ""
-  echo "Environment variables (with defaults):"
-  echo "  LOCATION=${LOCATION}"
-  echo "  RESOURCE_GROUP=${RESOURCE_GROUP}"
-  echo "  CLUSTER=${CLUSTER}"
-  echo "  KUBERNETES_VERSION=${KUBERNETES_VERSION}"
-  echo "  NODE_COUNT=${NODE_COUNT}"
-  echo "  KUBECONFIG=${KUBECONFIG}"
-  exit 1
+  echo "Kubernetes Version: $KUBERNETES_VERSION"
+  echo "Node Count:         $NODE_COUNT"
+  echo "Location:           $LOCATION"
+  echo "Resource Group:     $RESOURCE_GROUP"
+  echo "Hub VNet:           $HUB_VNET_NAME ($HUB_VNET_PREFIX)"
+  echo "Spoke VNet:         $SPOKE_VNET_NAME ($SPOKE_VNET_PREFIX)"
+  echo ""
 }
 
 log() {
   echo "[$(date +"%r")] $*"
 }
 
-checkDependencies() {
-  log "Checking dependencies ..."
+check_dependencies() {
+  log "Checking dependencies..."
   local _NEEDED="az kubectl ssh scp jq"
   local _DEP_FLAG=false
 
@@ -97,7 +114,7 @@ checkDependencies() {
   log "All dependencies satisfied"
 }
 
-registerProviders() {
+register_providers() {
   log "Registering resource providers..."
 
   _PROVIDERS="Microsoft.Compute Microsoft.ContainerService Microsoft.Network"
@@ -110,12 +127,12 @@ registerProviders() {
   log "Resource providers registered"
 }
 
-createResourceGroup() {
+create_resource_group() { {
   log "Creating resource group $RESOURCE_GROUP in $LOCATION"
   az group create --location "$LOCATION" --name "$RESOURCE_GROUP" -o none
 }
 
-createHubVNet() {
+create_hub_vnet() { {
   log "Creating hub virtual network..."
 
   # Create hub VNet with NVA subnet
@@ -130,7 +147,7 @@ createHubVNet() {
   log "Hub VNet created"
 }
 
-createSpokeVNet() {
+create_spoke_vnet() { {
   log "Creating spoke virtual network..."
 
   # Create spoke VNet with AKS subnet
@@ -145,7 +162,7 @@ createSpokeVNet() {
   log "Spoke VNet created"
 }
 
-createVNetPeerings() {
+create_vnet_peerings() {
   log "Creating VNet peerings..."
 
   # Get VNet IDs
@@ -175,7 +192,7 @@ createVNetPeerings() {
   log "VNet peerings created"
 }
 
-acceptMarketplaceTerms() {
+accept_marketplace_terms() {
   log "Accepting FreeBSD marketplace terms..."
 
   az vm image terms accept \
@@ -187,7 +204,7 @@ acceptMarketplaceTerms() {
   log "Marketplace terms accepted"
 }
 
-createNVA() {
+create_nva() {
   log "Creating FreeBSD NVA..."
 
   # Create public IP for NVA
@@ -254,7 +271,7 @@ createNVA() {
   log "FreeBSD NVA created"
 }
 
-configureNVA() {
+configure_nva() {
   log "Configuring PF on FreeBSD NVA..."
 
   NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
@@ -283,7 +300,7 @@ EOF"
   log "PF configured on FreeBSD NVA"
 }
 
-createRouteTable() {
+create_route_table() {
   log "Creating route table for forced tunneling..."
 
   # Get NVA private IP
@@ -317,7 +334,7 @@ createRouteTable() {
   log "Route table created and associated"
 }
 
-createAKSCluster() {
+create_aks_cluster() {
   log "Creating private AKS cluster..."
 
   # Get AKS subnet ID
@@ -345,7 +362,7 @@ createAKSCluster() {
   log "AKS cluster created"
 }
 
-linkPrivateDNSZone() {
+link_private_dns_zone() {
   log "Linking private DNS zone to hub VNet..."
 
   # Get node resource group
@@ -369,7 +386,7 @@ linkPrivateDNSZone() {
   log "Private DNS zone linked to hub VNet"
 }
 
-getCredentials() {
+get_credentials() {
   log "Getting cluster credentials..."
 
   az aks get-credentials \
@@ -381,7 +398,7 @@ getCredentials() {
   log "Credentials written to $KUBECONFIG"
 }
 
-copyKubeconfigToNVA() {
+copy_kubeconfig_to_nva() {
   log "Copying kubeconfig to NVA..."
 
   NVA_PIP=$(az network public-ip show -g "$RESOURCE_GROUP" -n "${NVA_NAME}-pip" --query ipAddress -o tsv)
@@ -390,7 +407,7 @@ copyKubeconfigToNVA() {
   log "Kubeconfig copied to NVA at ~/kubeconfig"
 }
 
-createTestPod() {
+create_test_pod() {
   log "Creating test pod..."
 
   az aks command invoke \
@@ -405,7 +422,7 @@ createTestPod() {
   log "Test pod created"
 }
 
-testICMP() {
+do_test_icmp() {
   log "Testing ICMP connectivity from AKS pod..."
 
   echo ""
@@ -429,7 +446,7 @@ testICMP() {
   echo "Expected NVA public IP: $NVA_PIP"
 }
 
-show() {
+do_show() {
   log "Getting infrastructure information..."
 
   echo ""
@@ -469,7 +486,7 @@ show() {
   az network route-table route list -g "$RESOURCE_GROUP" --route-table-name aks-rt -o table 2>/dev/null || echo "No route table found"
 }
 
-destroy() {
+do_delete() {
   log "Destroying all resources..."
 
   # Delete the resource group
@@ -483,31 +500,32 @@ exec_case() {
   local _opt=$1
 
   case ${_opt} in
-    install) main ;;
-    destroy) destroy ;;
-    show) show ;;
-    check-deps) checkDependencies ;;
-    test-icmp) testICMP ;;
-    *) printUsage ;;
+  install)       do_install ;;
+  delete)        do_delete ;;
+  show)          do_show ;;
+  check-deps)    check_dependencies ;;
+  test-icmp)     do_test_icmp ;;
+  *)             usage ;;
   esac
+  unset _opt
 }
 
-main() {
-  checkDependencies
-  registerProviders
-  createResourceGroup
-  createHubVNet
-  createSpokeVNet
-  createVNetPeerings
-  acceptMarketplaceTerms
-  createNVA
-  configureNVA
-  createRouteTable
-  createAKSCluster
-  linkPrivateDNSZone
-  getCredentials
-  copyKubeconfigToNVA
-  createTestPod
+do_install() {
+  check_dependencies
+  register_providers
+  create_resource_group
+  create_hub_vnet
+  create_spoke_vnet
+  create_vnet_peerings
+  accept_marketplace_terms
+  create_nva
+  configure_nva
+  create_route_table
+  create_aks_cluster
+  link_private_dns_zone
+  get_credentials
+  copy_kubeconfig_to_nva
+  create_test_pod
 
   log ""
   log "Hub-Spoke AKS with FreeBSD NVA installation completed!"
@@ -515,26 +533,31 @@ main() {
   log "Run '$0 -x test-icmp' to test ICMP connectivity"
 }
 
+################################################################################
 # Entry point
-while getopts "x:" opt; do
-  case $opt in
-    x)
-      exec_flag=true
-      EXEC_OPT="${OPTARG}"
-      ;;
-    *) printUsage ;;
-  esac
-done
-shift $((OPTIND - 1))
+main() {
+  while getopts "x:" opt; do
+    case $opt in
+      x)
+        exec_flag=true
+        EXEC_OPT="${OPTARG}"
+        ;;
+      *) usage ;;
+    esac
+  done
+  shift $((OPTIND - 1))
 
-if [ $OPTIND = 1 ]; then
-  printHeader
-  printUsage
-  exit 0
-fi
+  if [ $OPTIND = 1 ]; then
+    print_header
+    usage
+    exit 0
+  fi
 
-if [[ "${exec_flag}" == "true" ]]; then
-  exec_case "${EXEC_OPT}"
-fi
+  # process actions
+  if [[ "${exec_flag}" == "true" ]]; then
+    exec_case "${EXEC_OPT}"
+  fi
+}
 
+main "$@"
 exit 0

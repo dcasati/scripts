@@ -1,26 +1,49 @@
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -e
+set -Eo pipefail
 
+trap exit SIGINT SIGTERM
+
+################################################################################
 # AppCAT Ruleset Cleanup Script
 # Optimized for Spring Boot applications targeting Azure AKS on Linux
 # Removes unnecessary rulesets to speed up assessments
 
 ################################################################################
+# Default configuration
 RULESETS_DIR="${HOME}/.appcat/rulesets"
 ################################################################################
 
-printHeader() {
+__usage="
+    -x  action to be executed.
+
+Possible verbs are:
+    cleanup        Remove unnecessary rulesets and optimize for Spring Boot.
+
+Environment variables (with defaults):
+    RULESETS_DIR=${RULESETS_DIR}
+"
+
+usage() {
+  echo "usage: ${0##*/} [options]"
+  echo "${__usage/[[:space:]]/}"
+  exit 1
+}
+
+print_header() {
+  echo ""
   echo "AppCAT Ruleset Cleanup"
   echo "========================================================"
+  echo ""
   echo "Optimized for Spring Boot apps targeting Azure AKS/Linux"
+  echo "Rulesets Directory: $RULESETS_DIR"
   echo ""
 }
 
-removeRulesetDirectories() {
+remove_ruleset_directories() {
   echo "Removing entire ruleset directories..."
   local _RULESETS="camel3 camel4 droolsjbpm eap6 eap7 eap8 eapxp eapxp6 fuse fuse-service-works hibernate jakarta-ee9 jws6 openliberty openjdk7 openjdk8 openjdk11 quarkus rhr os"
-  
+
   for i in ${_RULESETS}; do
     rm -rf "${RULESETS_DIR}/${i}"
     echo "  Removed: ${i} ruleset directory"
@@ -28,7 +51,7 @@ removeRulesetDirectories() {
   echo ""
 }
 
-cleanAzureRuleset() {
+clean_azure_ruleset() {
   echo "Cleaning azure ruleset..."
   cd "${RULESETS_DIR}/azure" 2>/dev/null && rm -f \
     01-azure-aws-config.yaml \
@@ -46,7 +69,7 @@ cleanAzureRuleset() {
   echo ""
 }
 
-cleanCloudReadinessRuleset() {
+clean_cloud_readiness_ruleset() {
   echo "Cleaning cloud-readiness ruleset..."
   cd "${RULESETS_DIR}/cloud-readiness" 2>/dev/null && rm -f \
     02-java-corba.yaml \
@@ -60,7 +83,7 @@ cleanCloudReadinessRuleset() {
   echo ""
 }
 
-cleanTechnologyUsageRuleset() {
+clean_technology_usage_ruleset() {
   echo "Cleaning technology-usage ruleset..."
   cd "${RULESETS_DIR}/technology-usage" 2>/dev/null && rm -f \
     18-jta-technology-usage.yaml \
@@ -72,7 +95,7 @@ cleanTechnologyUsageRuleset() {
   echo ""
 }
 
-printSummary() {
+print_summary() {
   echo "Cleanup complete!"
   echo ""
   echo "Remaining rulesets optimized for:"
@@ -97,16 +120,50 @@ printSummary() {
   done
 }
 
-main() {
-  printHeader
-  removeRulesetDirectories
-  cleanAzureRuleset
-  cleanCloudReadinessRuleset
-  cleanTechnologyUsageRuleset
-  printSummary
+exec_case() {
+  local _opt=$1
+
+  case ${_opt} in
+  cleanup)       do_cleanup ;;
+  *)             usage ;;
+  esac
+  unset _opt
 }
 
-# entry point
-main "$@"
+do_cleanup() {
+  print_header
+  remove_ruleset_directories
+  clean_azure_ruleset
+  clean_cloud_readiness_ruleset
+  clean_technology_usage_ruleset
+  print_summary
+}
 
+################################################################################
+# Entry point
+main() {
+  while getopts "x:" opt; do
+    case $opt in
+      x)
+        exec_flag=true
+        EXEC_OPT="${OPTARG}"
+        ;;
+      *) usage ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+
+  if [ $OPTIND = 1 ]; then
+    # No arguments, run cleanup by default
+    do_cleanup
+    exit 0
+  fi
+
+  # process actions
+  if [[ "${exec_flag}" == "true" ]]; then
+    exec_case "${EXEC_OPT}"
+  fi
+}
+
+main "$@"
 exit 0

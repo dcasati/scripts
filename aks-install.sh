@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -e
+set -Eo pipefail
 
+trap exit SIGINT SIGTERM
+
+################################################################################
 # AKS Cluster Deployment Script
 # Deploys a single-node AKS cluster with managed identity
 
@@ -15,41 +18,48 @@ NODE_COUNT=${NODE_COUNT:-1}
 KUBECONFIG=${KUBECONFIG:-${PWD}/cluster.config}
 ################################################################################
 
-printHeader() {
-  echo "AKS Cluster Deployment"
-  echo "=========================================="
-  echo "Kubernetes Version: $KUBERNETES_VERSION"
-  echo "Node Count: $NODE_COUNT"
-  echo "Location: $LOCATION"
-  echo "Resource Group: $RESOURCE_GROUP"
-  echo ""
+__usage="
+    -x  action to be executed.
+
+Possible verbs are:
+    install        Creates AKS cluster.
+    delete         Deletes AKS cluster and associated resources.
+    show           Shows cluster information and credentials.
+    check-deps     Checks if required dependencies are installed.
+
+Environment variables (with defaults):
+    LOCATION=${LOCATION}
+    RESOURCE_GROUP=${RESOURCE_GROUP}
+    CLUSTER=${CLUSTER}
+    KUBERNETES_VERSION=${KUBERNETES_VERSION}
+    NODE_COUNT=${NODE_COUNT}
+    KUBECONFIG=${KUBECONFIG}
+"
+
+usage() {
+  echo "usage: ${0##*/} [options]"
+  echo "${__usage/[[:space:]]/}"
+  exit 1
 }
 
-printUsage() {
-  echo "usage: ${0##*/} [options]"
+print_header() {
   echo ""
-  echo "Available Commands:"
-  echo "  -x install       Creates AKS cluster"
-  echo "  -x destroy       Deletes AKS cluster and associated resources"
-  echo "  -x show          Shows cluster information and credentials"
-  echo "  -x check-deps    Checks if required dependencies are installed"
+  echo "AKS Cluster Deployment"
+  echo "=========================================="
   echo ""
-  echo "Environment variables (with defaults):"
-  echo "  LOCATION=${LOCATION}"
-  echo "  RESOURCE_GROUP=${RESOURCE_GROUP}"
-  echo "  CLUSTER=${CLUSTER}"
-  echo "  KUBERNETES_VERSION=${KUBERNETES_VERSION}"
-  echo "  NODE_COUNT=${NODE_COUNT}"
-  echo "  KUBECONFIG=${KUBECONFIG}"
-  exit 1
+  echo "Kubernetes Version: $KUBERNETES_VERSION"
+  echo "Node Count:         $NODE_COUNT"
+  echo "Location:           $LOCATION"
+  echo "Resource Group:     $RESOURCE_GROUP"
+  echo ""
 }
 
 log() {
   echo "[$(date +"%r")] $*"
 }
 
-checkDependencies() {
-  log "Checking dependencies ..."
+check_dependencies() {
+  log "Checking dependencies..."
   local _NEEDED="az kubectl"
   local _DEP_FLAG=false
 
@@ -80,7 +90,7 @@ checkDependencies() {
   log "All dependencies satisfied"
 }
 
-registerProviders() {
+register_providers() {
   log "Registering resource providers..."
 
   _PROVIDERS="Microsoft.Compute Microsoft.ContainerService Microsoft.Network"
@@ -93,12 +103,12 @@ registerProviders() {
   log "Resource providers registered"
 }
 
-createResourceGroup() {
+create_resource_group() {
   log "Creating resource group $RESOURCE_GROUP in $LOCATION"
   az group create --location "$LOCATION" --name "$RESOURCE_GROUP"
 }
 
-createVirtualNetwork() {
+create_virtual_network() {
   log "Creating virtual network and subnet..."
 
   # Create virtual network
@@ -117,7 +127,7 @@ createVirtualNetwork() {
   log "Virtual network created"
 }
 
-createCluster() {
+create_cluster() {
   log "Creating AKS cluster with Kubernetes $KUBERNETES_VERSION..."
 
   # Get subnet ID
@@ -139,7 +149,7 @@ createCluster() {
   log "AKS cluster created successfully"
 }
 
-getCredentials() {
+get_credentials() {
   log "Getting cluster credentials..."
 
   az aks get-credentials \
@@ -151,7 +161,7 @@ getCredentials() {
   log "Credentials written to $KUBECONFIG"
 }
 
-show() {
+do_show() {
   log "Getting cluster information..."
 
   if az aks show --name "$CLUSTER" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
@@ -176,7 +186,7 @@ show() {
   fi
 }
 
-destroy() {
+do_delete() {
   log "Destroying AKS cluster and associated resources..."
 
   # Delete the cluster
@@ -198,21 +208,22 @@ exec_case() {
   local _opt=$1
 
   case ${_opt} in
-    install) main ;;
-    destroy) destroy ;;
-    show) show ;;
-    check-deps) checkDependencies ;;
-    *) printUsage ;;
+  install)       do_install ;;
+  delete)        do_delete ;;
+  show)          do_show ;;
+  check-deps)    check_dependencies ;;
+  *)             usage ;;
   esac
+  unset _opt
 }
 
-main() {
-  checkDependencies
-  registerProviders
-  createResourceGroup
-  createVirtualNetwork
-  createCluster
-  getCredentials
+do_install() {
+  check_dependencies
+  register_providers
+  create_resource_group
+  create_virtual_network
+  create_cluster
+  get_credentials
 
   log ""
   log "AKS cluster installation completed!"
@@ -220,26 +231,31 @@ main() {
   log "Kubernetes version: $KUBERNETES_VERSION"
 }
 
+################################################################################
 # Entry point
-while getopts "x:" opt; do
-  case $opt in
-    x)
-      exec_flag=true
-      EXEC_OPT="${OPTARG}"
-      ;;
-    *) printUsage ;;
-  esac
-done
-shift $((OPTIND - 1))
+main() {
+  while getopts "x:" opt; do
+    case $opt in
+      x)
+        exec_flag=true
+        EXEC_OPT="${OPTARG}"
+        ;;
+      *) usage ;;
+    esac
+  done
+  shift $((OPTIND - 1))
 
-if [ $OPTIND = 1 ]; then
-  printHeader
-  printUsage
-  exit 0
-fi
+  if [ $OPTIND = 1 ]; then
+    print_header
+    usage
+    exit 0
+  fi
 
-if [[ "${exec_flag}" == "true" ]]; then
-  exec_case "${EXEC_OPT}"
-fi
+  # process actions
+  if [[ "${exec_flag}" == "true" ]]; then
+    exec_case "${EXEC_OPT}"
+  fi
+}
 
+main "$@"
 exit 0

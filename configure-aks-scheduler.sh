@@ -136,7 +136,10 @@ create_cluster() {
       --name "$CLUSTER_NAME" \
       --node-count 1 \
       --enable-upstream-kubescheduler-user-configuration \
-      --generate-ssh-keys
+      --node-taints sku=gpu:NoSchedule \
+      --generate-ssh-keys \
+      --zones 1,2,3
+
     log "AKS cluster created successfully"
   fi
 }
@@ -170,7 +173,7 @@ get_credentials() {
 generate_scheduler_config() {
   log "Generating scheduler configuration files"
 
-  cat <<EOF >bin-pack-cpu-scheduler.yaml
+  cat <<EOF > bin-pack-cpu-scheduler.yaml
 apiVersion: aks.azure.com/v1alpha1
 kind: SchedulerConfiguration
 metadata:
@@ -191,7 +194,7 @@ spec:
                     weight: 1
 EOF
 
-  cat <<EOF >pod-topology-spreader-scheduler.yaml
+  cat <<EOF > pod-topology-spreader-scheduler.yaml
 apiVersion: aks.azure.com/v1alpha1
 kind: SchedulerConfiguration
 metadata:
@@ -214,7 +217,7 @@ spec:
                   whenUnsatisfiable: ScheduleAnyway
 EOF
 
-  cat <<EOF >bin-pack-gpu-scheduler.yaml
+  cat <<EOF > bin-pack-gpu-scheduler.yaml
 apiVersion: aks.azure.com/v1alpha1
 kind: SchedulerConfiguration
 metadata:

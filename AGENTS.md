@@ -23,7 +23,7 @@ Every script must start with the following header:
 ```bash
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -Eo pipefail
+set -Eeuo pipefail
 
 # Optional trap for signal handling
 trap exit SIGINT SIGTERM
@@ -32,7 +32,7 @@ trap exit SIGINT SIGTERM
 **Explanation:**
 - `#!/usr/bin/env bash` - Portable shebang
 - `# shfmt -i 2 -ci -w` - Formatter directive (2-space indent, switch case indent, write in-place)
-- `set -Eo pipefail` - Exit on error, fail on pipe errors
+- `set -Eeuo pipefail` - Exit on error, fail on pipe errors
 - `trap exit SIGINT SIGTERM` - Clean exit on interrupt signals
 
 ---
@@ -44,7 +44,7 @@ Scripts should follow this standard structure:
 ```bash
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -Eo pipefail
+set -Eeuo pipefail
 
 trap exit SIGINT SIGTERM
 
@@ -352,7 +352,7 @@ create_or_update_resource() {
 ## Error Handling
 
 ### Exit on Error
-Use `set -Eo pipefail` at the top of the script.
+Use `set -Eeuo pipefail` at the top of the script.
 
 ### Explicit Checks
 ```bash
@@ -549,7 +549,7 @@ Here's a minimal but complete script following all conventions:
 ```bash
 #!/usr/bin/env bash
 # shfmt -i 2 -ci -w
-set -Eo pipefail
+set -Eeuo pipefail
 
 trap exit SIGINT SIGTERM
 
@@ -740,7 +740,7 @@ When creating a new script, ensure it has:
 
 - [ ] Proper shebang: `#!/usr/bin/env bash`
 - [ ] Format directive: `# shfmt -i 2 -ci -w`
-- [ ] Error handling: `set -Eo pipefail`
+- [ ] Error handling: `set -Eeuo pipefail`
 - [ ] Signal trap: `trap exit SIGINT SIGTERM`
 - [ ] Configuration section with defaults
 - [ ] `__usage` variable with help text
